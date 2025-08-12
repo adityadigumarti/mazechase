@@ -188,8 +188,18 @@
         let totalPaths = 0;
         
         // Maze configuration
-        const MAZE_ROWS = 15;
-        const MAZE_COLS = 20;
+        const MAZE_SIZES = [
+            { rows: 15, cols: 20 }, // Level 1
+            { rows: 17, cols: 22 }, // Level 2
+            { rows: 19, cols: 25 }, // Level 3
+            { rows: 21, cols: 28 }, // Level 4
+            { rows: 25, cols: 35 }, // Level 5
+            { rows: 27, cols: 37 }, // Level 6
+            { rows: 29, cols: 39 }, // Level 7
+            { rows: 31, cols: 41 }, // Level 8
+            { rows: 33, cols: 43 }, // Level 9
+            { rows: 35, cols: 45 }  // Level 10
+        ];
         const NUM_LEVELS = 10;
         const ENEMY_SPEED_BASE = 150;
         const ENEMY_SPEED_DECREASE_FACTOR = 10;
@@ -197,32 +207,51 @@
         let currentLevel = 0;
 
         function generateMaze() {
+            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
+            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             let grid = Array.from({ length: MAZE_ROWS }, () => Array(MAZE_COLS).fill(0));
             let stack = [];
-            const startX = 1;
-            const startY = 1;
-            grid[startY][startX] = 1;
+
+            // Start at a random odd-numbered cell
+            const startX = 1 + 2 * Math.floor(Math.random() * ((MAZE_COLS - 1) / 2));
+            const startY = 1 + 2 * Math.floor(Math.random() * ((MAZE_ROWS - 1) / 2));
+            grid[startY][startX] = 1; // Mark as unvisited path
             stack.push({ x: startX, y: startY });
-            const directions = [{ dx: 0, dy: 1 }, { dx: 0, dy: -1 }, { dx: 1, dy: 0 }, { dx: -1, dy: 0 }];
+
+            const directions = [{ dx: 0, dy: -2 }, { dx: 0, dy: 2 }, { dx: -2, dy: 0 }, { dx: 2, dy: 0 }];
 
             while (stack.length > 0) {
-                const { x, y } = stack.pop();
-                const shuffledDirections = directions.sort(() => Math.random() - 0.5);
+                let current = stack[stack.length - 1];
+                let neighbors = [];
 
-                for (const { dx, dy } of shuffledDirections) {
-                    const nx = x + dx * 2;
-                    const ny = y + dy * 2;
-                    if (ny >= 0 && ny < MAZE_ROWS && nx >= 0 && nx < MAZE_COLS && grid[ny][nx] === 0) {
-                        grid[y + dy][x + dx] = 1;
-                        grid[ny][nx] = 1;
-                        stack.push({ x: nx, y: ny });
+                // Find unvisited neighbors (2 cells away)
+                for (const { dx, dy } of directions) {
+                    const nextX = current.x + dx;
+                    const nextY = current.y + dy;
+
+                    if (nextX > 0 && nextX < MAZE_COLS - 1 && nextY > 0 && nextY < MAZE_ROWS - 1 && grid[nextY][nextX] === 0) {
+                        neighbors.push({ x: nextX, y: nextY, dx: dx, dy: dy });
                     }
+                }
+
+                if (neighbors.length > 0) {
+                    // Pick a random unvisited neighbor
+                    const next = neighbors[Math.floor(Math.random() * neighbors.length)];
+                    
+                    // Carve a path to it (mark the wall between as a path)
+                    grid[current.y + next.dy / 2][current.x + next.dx / 2] = 1;
+                    grid[next.y][next.x] = 1;
+                    stack.push(next);
+                } else {
+                    stack.pop(); // Backtrack
                 }
             }
             return grid;
         }
 
         function getRandomValidPosition(grid) {
+            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
+            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             let x, y;
             do {
                 x = Math.floor(Math.random() * MAZE_COLS);
@@ -232,6 +261,9 @@
         }
 
         function resetGame() {
+            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
+            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
+
             gameRunning = true;
             visitedCount = 0;
             totalPaths = 0;
@@ -267,11 +299,14 @@
                 maze[player.y][player.x] = 2;
                 visitedCount++;
             }
-
+            
+            resizeCanvas();
             requestAnimationFrame(gameLoop);
         }
 
         function resizeCanvas() {
+            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
+            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             const container = document.querySelector('.game-container');
             const containerWidth = container.offsetWidth - 40;
             const containerHeight = window.innerHeight * 0.6;
@@ -287,6 +322,8 @@
         }
 
         function draw() {
+            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
+            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             if (maze.length === 0) return;
 
             ctx.clearRect(0, 0, canvas.width, canvas.height);
@@ -327,6 +364,8 @@
         }
 
         function movePlayer() {
+            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
+            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             const now = Date.now();
             if (now - lastPlayerMoveTime < playerMoveInterval) {
                 return;
@@ -352,6 +391,8 @@
         }
 
         function moveEnemies() {
+            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
+            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             const now = Date.now();
             const speedFactor = currentLevel < 5 ? currentLevel : (currentLevel - 5);
             const enemyMoveDelay = ENEMY_SPEED_BASE - (speedFactor * ENEMY_SPEED_DECREASE_FACTOR);
