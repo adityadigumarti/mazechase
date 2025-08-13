@@ -162,6 +162,26 @@
             transform: scale(1.5);
         }
 
+        .powerup {
+            animation: pulse 1.5s infinite;
+        }
+
+        @keyframes pulse {
+            0% { transform: scale(1); }
+            50% { transform: scale(1.2); }
+            100% { transform: scale(1); }
+        }
+
+        .powerup-active {
+            animation: flash 0.5s infinite;
+        }
+
+        @keyframes flash {
+            0% { opacity: 1; }
+            50% { opacity: 0.5; }
+            100% { opacity: 1; }
+        }
+
         @media (max-width: 600px) {
             .game-container {
                 padding: 10px;
@@ -195,7 +215,11 @@
     <div class="options-container">
         <div>
             <label for="greenEnemyPassCheckbox">Activate Green Enemy Free Pass</label>
-            <input type="checkbox" id="greenEnemyPassCheckbox" disabled>
+            <input type="checkbox" id="greenEnemyPassCheckbox">
+        </div>
+        <div>
+            <label for="powerupToggle">Power-ups On/Off</label>
+            <input type="checkbox" id="powerupToggle" checked>
         </div>
         <div>
             <label for="musicToggle">Music On/Off</label>
@@ -216,6 +240,7 @@
         const restartLevelButton = document.getElementById('restartLevelButton');
         const gameStatus = document.getElementById('gameStatus');
         const greenEnemyPassCheckbox = document.getElementById('greenEnemyPassCheckbox');
+        const powerupToggle = document.getElementById('powerupToggle');
         const musicToggle = document.getElementById('musicToggle');
 
         let tileWidth, tileHeight;
@@ -224,6 +249,11 @@
         let playerMoveInterval = 150;
         let isMusicPlaying = false;
         let greenEnemyFreePass = false;
+        let isPowerupActive = false;
+        let powerupStartTime = 0;
+        const POWERUP_DURATION = 12000;
+        let powerups = [];
+
 
         // Game state
         let player = {};
@@ -233,7 +263,7 @@
         let totalPaths = 0;
         
         // --- Static Maze Data ---
-        // 0 = wall, 1 = unvisited path, 2 = visited path
+        // 0 = wall, 1 = unvisited path, 2 = visited path, 3 = powerup
         const EASY_MAZE = [
             [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
             [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
@@ -285,7 +315,7 @@
         // Maze configuration
         const MAZE_SIZES = MAZE_MAPS.map(m => ({ rows: m.length, cols: m[0].length }));
         const NUM_LEVELS = 10;
-        const ENEMY_SPEED_BASE = 275; 
+        const ENEMY_SPEED_BASE = 250; 
         const ENEMY_SPEED_DECREASE_FACTOR = 3; 
         const ENEMY_SPAWN_MIN_DISTANCE = 8;
         const RANDOM_MOVE_DURATION = 1000;
@@ -295,6 +325,9 @@
         // Music setup
         let ambientSynth;
         let ambientSequence;
+        let powerupSynth;
+        let powerupSequence;
+
         function setupMusic() {
             if (ambientSynth) return;
             ambientSynth = new Tone.PolySynth(Tone.MonoSynth, {
@@ -307,9 +340,20 @@
                 },
                 volume: -10
             }).toDestination();
+
+            powerupSynth = new Tone.PolySynth(Tone.Synth, {
+                oscillator: { type: 'sawtooth' },
+                envelope: {
+                    attack: 0.01,
+                    decay: 0.1,
+                    sustain: 0.1,
+                    release: 0.2
+                },
+                volume: -10
+            }).toDestination();
         }
 
-        function startMusic() {
+        function startAmbientMusic() {
             if (isMusicPlaying) return;
             Tone.start();
             setupMusic();
@@ -321,12 +365,30 @@
             Tone.Transport.start();
             isMusicPlaying = true;
         }
-        
+
+        function startPowerupMusic() {
+            Tone.Transport.stop();
+            const notes = ["C4", "C5", "G4", "C5", "G4", "E4"];
+            powerupSequence = new Tone.Sequence((time, note) => {
+                powerupSynth.triggerAttackRelease(note, "16n", time);
+            }, notes, "8n").start(0);
+            Tone.Transport.start();
+        }
+
         function stopMusic() {
             if (isMusicPlaying) {
                 Tone.Transport.stop();
-                ambientSequence.stop();
+                if (ambientSequence) ambientSequence.stop();
+                if (powerupSequence) powerupSequence.stop();
                 isMusicPlaying = false;
+            }
+        }
+        
+        function resumeAmbientMusic() {
+             if (isMusicPlaying) {
+                if (powerupSequence) powerupSequence.stop();
+                if (ambientSequence) ambientSequence.start(0);
+                Tone.Transport.start();
             }
         }
 
@@ -394,6 +456,14 @@
             maze = JSON.parse(JSON.stringify(MAZE_MAPS[currentLevel]));
         }
 
+        function placePowerups() {
+            const numPowerups = currentLevel < 5 ? 1 : 2;
+            for (let i = 0; i < numPowerups; i++) {
+                const pos = getRandomValidPosition(maze);
+                powerups.push(pos);
+            }
+        }
+
         function getRandomValidPosition(grid, playerPos = null, minDistance = 0) {
             const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
             const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
@@ -413,8 +483,9 @@
         
         function resetGame(startingLevel = 0) {
             gameRunning = true;
-            greenEnemyFreePass = false;
-            greenEnemyPassCheckbox.checked = false; // Reset checkbox state on reset
+            greenEnemyFreePass = greenEnemyPassCheckbox.checked;
+            isPowerupActive = false;
+            powerups = [];
             currentLevel = startingLevel;
             visitedCount = 0;
             totalPaths = 0;
@@ -456,6 +527,10 @@
                 });
             }
             
+            if (powerupToggle.checked) {
+                placePowerups();
+            }
+
             startOverlay.classList.remove('visible');
             gameOverOverlay.classList.remove('visible');
             gameStatus.textContent = `Level ${currentLevel + 1}`;
@@ -464,9 +539,6 @@
                 maze[player.y][player.x] = 2;
                 visitedCount++;
             }
-
-            // Enable/disable checkbox based on level
-            greenEnemyPassCheckbox.disabled = (currentLevel === 0);
             
             saveGameProgress();
             resizeCanvas();
@@ -500,6 +572,7 @@
             const wallColor = getComputedStyle(document.documentElement).getPropertyValue('--wall-color').trim();
             const pathColorUnvisited = getComputedStyle(document.documentElement).getPropertyValue('--path-color-unvisited').trim();
             const pathColorVisited = getComputedStyle(document.documentElement).getPropertyValue('--path-color-visited').trim();
+            const powerupColor = '#FFD700'; // Gold
 
             for (let r = 0; r < MAZE_ROWS; r++) {
                 for (let c = 0; c < MAZE_COLS; c++) {
@@ -517,8 +590,19 @@
                 }
             }
             
+            // Draw powerups
+            powerups.forEach(p => drawPowerup(p.x, p.y, powerupColor));
+            
             drawCharacter(player, player.color);
-            enemies.forEach(enemy => drawCharacter(enemy, enemy.color));
+            enemies.forEach(enemy => {
+                const enemyColor = isPowerupActive && Math.floor(Date.now() / 250) % 2 === 0 ? '#800080' : enemy.color;
+                drawCharacter(enemy, enemyColor);
+            });
+            
+            if (isPowerupActive) {
+                const remainingTime = Math.ceil((powerupStartTime + POWERUP_DURATION - Date.now()) / 1000);
+                gameStatus.textContent = `POWER-UP ACTIVE! ${remainingTime}s`;
+            }
         }
 
         function drawCharacter(character, color) {
@@ -529,6 +613,21 @@
             ctx.arc(centerX, centerY, radius, 0, Math.PI * 2);
             ctx.fillStyle = color;
             ctx.fill();
+            ctx.closePath();
+        }
+
+        function drawPowerup(x, y, color) {
+            const size = Math.min(tileWidth, tileHeight) * 0.4;
+            const centerX = (x + 0.5) * tileWidth;
+            const centerY = (y + 0.5) * tileHeight;
+            const thickness = size / 4;
+
+            ctx.fillStyle = color;
+            ctx.beginPath();
+            // Horizontal bar
+            ctx.fillRect(centerX - size / 2, centerY - thickness / 2, size, thickness);
+            // Vertical bar
+            ctx.fillRect(centerX - thickness / 2, centerY - size / 2, thickness, size);
             ctx.closePath();
         }
 
@@ -560,6 +659,18 @@
                     checkWinCondition();
                     saveGameProgress();
                 }
+
+                // Check for powerup collision
+                const collectedPowerupIndex = powerups.findIndex(p => p.x === player.x && p.y === player.y);
+                if (collectedPowerupIndex !== -1) {
+                    if (musicToggle.checked) {
+                        ambientSequence.stop();
+                        startPowerupMusic();
+                    }
+                    isPowerupActive = true;
+                    powerupStartTime = Date.now();
+                    powerups.splice(collectedPowerupIndex, 1);
+                }
             } else {
                 player.dx = 0;
                 player.dy = 0;
@@ -573,15 +684,37 @@
             const speedFactor = currentLevel;
             const enemyMoveDelay = ENEMY_SPEED_BASE - (speedFactor * ENEMY_SPEED_DECREASE_FACTOR);
             
+            if (isPowerupActive && now - powerupStartTime > POWERUP_DURATION) {
+                isPowerupActive = false;
+                if (musicToggle.checked) {
+                    resumeAmbientMusic();
+                }
+                gameStatus.textContent = `Level ${currentLevel + 1}`;
+            }
+
             enemies.forEach((enemy, index) => {
                 if (now - enemy.lastMoveTime < enemyMoveDelay) {
                     return;
                 }
                 enemy.lastMoveTime = now;
+
+                if (isPowerupActive) {
+                    const directions = [{dx: -1, dy: 0}, {dx: 1, dy: 0}, {dx: 0, dy: -1}, {dx: 0, dy: 1}];
+                    const newDirection = directions[Math.floor(Math.random() * directions.length)];
+                    let newX = enemy.x + newDirection.dx;
+                    let newY = enemy.y + newDirection.dy;
+                    newX = (newX + MAZE_COLS) % MAZE_COLS;
+                    newY = (newY + MAZE_ROWS) % MAZE_ROWS;
+                    if (maze[newY][newX] !== 0) {
+                        enemy.x = newX;
+                        enemy.y = newY;
+                    }
+                    return;
+                }
                 
                 // Behavior for the first enemy (chaser)
                 if (index === 0) {
-                    if (enemy.path.length === 0 || Math.random() < 0.1) { // Recalculate path occasionally to make it losable
+                    if (enemy.path.length === 0 || Math.random() < 0.1) {
                         enemy.path = findPath({x: enemy.x, y: enemy.y}, player, maze);
                     }
                     if (enemy.path.length > 0) {
@@ -589,7 +722,6 @@
                         enemy.x = nextStep.x;
                         enemy.y = nextStep.y;
                     } else {
-                        // Wander for a bit if a path can't be found
                         const directions = [];
                         if (maze[enemy.y][(enemy.x - 1 + MAZE_COLS) % MAZE_COLS] !== 0) directions.push({dx: -1, dy: 0});
                         if (maze[enemy.y][(enemy.x + 1) % MAZE_COLS] !== 0) directions.push({dx: 1, dy: 0});
@@ -624,19 +756,23 @@
         function checkCollision() {
             enemies.forEach(enemy => {
                 if (player.x === enemy.x && player.y === enemy.y) {
-                    const greenEnemyColor = getComputedStyle(document.documentElement).getPropertyValue('--enemy-color-2').trim();
-
-                    if (enemy.color === greenEnemyColor && greenEnemyFreePass) {
-                        greenEnemyFreePass = false;
-                        greenEnemyPassCheckbox.checked = false;
+                    if (isPowerupActive) {
                         Object.assign(enemy, getRandomValidPosition(maze, player, ENEMY_SPAWN_MIN_DISTANCE));
                         enemy.path = [];
                     } else {
-                        gameRunning = false;
-                        stopMusic();
-                        gameOverMessage.textContent = "Game Over!";
-                        gameOverOverlay.classList.add('visible');
-                        gameStatus.textContent = `Level ${currentLevel + 1} - Game Over!`;
+                        const greenEnemyColor = getComputedStyle(document.documentElement).getPropertyValue('--enemy-color-2').trim();
+                        if (enemy.color === greenEnemyColor && greenEnemyFreePass) {
+                            greenEnemyFreePass = false;
+                            greenEnemyPassCheckbox.checked = false;
+                            Object.assign(enemy, getRandomValidPosition(maze, player, ENEMY_SPAWN_MIN_DISTANCE));
+                            enemy.path = [];
+                        } else {
+                            gameRunning = false;
+                            stopMusic();
+                            gameOverMessage.textContent = "Game Over!";
+                            gameOverOverlay.classList.add('visible');
+                            gameStatus.textContent = `Level ${currentLevel + 1} - Game Over!`;
+                        }
                     }
                 }
             });
@@ -678,6 +814,11 @@
         }
 
         function handleKeyDown(event) {
+            // Prevent scrolling with arrow keys
+            if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight'].includes(event.key)) {
+                event.preventDefault();
+            }
+
             if (!gameRunning) {
                 return;
             }
@@ -729,7 +870,7 @@
             
             startGameButton.addEventListener('click', () => {
                 if (musicToggle.checked) {
-                    startMusic();
+                    startAmbientMusic();
                 }
                 resetGame(currentLevel);
             });
@@ -738,14 +879,14 @@
                 localStorage.removeItem('chazeAmazeProgress');
                 currentLevel = 0;
                 if (musicToggle.checked) {
-                    startMusic();
+                    startAmbientMusic();
                 }
                 resetGame(currentLevel);
             });
             
             restartLevelButton.addEventListener('click', () => {
                 if (musicToggle.checked) {
-                    startMusic();
+                    startAmbientMusic();
                 }
                 resetGame(currentLevel);
             });
@@ -754,9 +895,14 @@
                 greenEnemyFreePass = greenEnemyPassCheckbox.checked;
             });
 
+            powerupToggle.addEventListener('change', () => {
+                // Powerups are only placed at the start of a level, so this state will be
+                // used when the game is reset.
+            });
+
             musicToggle.addEventListener('change', () => {
                 if (musicToggle.checked) {
-                    startMusic();
+                    startAmbientMusic();
                 } else {
                     stopMusic();
                 }
