@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>MazeChase v3</title>
+    <title>ChazeAmaze</title>
     <style>
         @import url('https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap');
 
@@ -44,14 +44,15 @@
             flex-direction: column;
             align-items: center;
             width: 100%;
-            max-width: 600px;
+            max-width: 90vw;
+            margin-bottom: 20px; /* Add some space below the game container */
         }
         
         h1 {
             color: var(--text-color);
             text-shadow: 2px 2px #000;
             margin-bottom: 20px;
-            font-size: 1.5rem;
+            font-size: clamp(1.2rem, 3vw, 2.5rem);
             text-align: center;
         }
 
@@ -68,20 +69,21 @@
         
         .game-status {
             margin-top: 20px;
-            font-size: 1rem;
+            font-size: clamp(0.8rem, 2vw, 1.2rem);
             text-align: center;
             color: var(--text-color);
             min-height: 20px;
+            white-space: nowrap;
         }
 
         .controls {
             margin-top: 20px;
             text-align: center;
-            font-size: 0.8rem;
+            font-size: clamp(0.6rem, 1.5vw, 0.9rem);
             color: #ddd;
         }
 
-        .game-over-overlay {
+        .game-overlay {
             position: absolute;
             top: 0;
             left: 0;
@@ -99,86 +101,129 @@
             z-index: 10;
         }
 
-        .game-over-overlay.visible {
+        .game-overlay.visible {
             opacity: 1;
             visibility: visible;
         }
 
-        .game-over-message {
-            font-size: 2.5rem;
+        .game-message {
+            font-size: clamp(1.5rem, 4vw, 2.5rem);
             color: var(--text-color);
             text-shadow: 3px 3px #000;
             margin-bottom: 20px;
             text-align: center;
         }
 
-        .restart-button {
+        .button-group {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 15px;
+        }
+
+        .action-button {
             background-color: var(--text-color);
             color: white;
             border: none;
             padding: 15px 30px;
             border-radius: 50px;
             font-family: 'Press Start 2P', cursive;
-            font-size: 1rem;
+            font-size: clamp(0.8rem, 2vw, 1rem);
             cursor: pointer;
             box-shadow: 0 5px 10px rgba(0, 0, 0, 0.3);
             transition: transform 0.2s, box-shadow 0.2s;
             text-transform: uppercase;
         }
+        
+        .action-button.restart-level {
+            background-color: #4b4b4b;
+        }
 
-        .restart-button:hover {
+        .action-button:hover {
             transform: translateY(-2px);
             box-shadow: 0 7px 12px rgba(0, 0, 0, 0.5);
         }
 
-        .restart-button:active {
+        .action-button:active {
             transform: translateY(0);
             box-shadow: 0 3px 6px rgba(0, 0, 0, 0.3);
         }
 
+        .options-container {
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            gap: 10px;
+            font-size: clamp(0.7rem, 1.5vw, 0.9rem);
+            color: #ddd;
+        }
+
+        .options-container input[type="checkbox"] {
+            transform: scale(1.5);
+        }
+
         @media (max-width: 600px) {
-            h1 {
-                font-size: 1.2rem;
-            }
-            .game-over-message {
-                font-size: 1.8rem;
-            }
-            .restart-button {
-                font-size: 0.8rem;
-                padding: 12px 24px;
-            }
-            .controls {
-                font-size: 0.7rem;
+            .game-container {
+                padding: 10px;
             }
         }
     </style>
 </head>
 <body>
     <div class="game-container">
-        <h1>MazeChase</h1>
+        <h1>ChazeAmaze</h1>
         <canvas id="gameCanvas"></canvas>
         <div id="gameStatus" class="game-status">Press any arrow key to start!</div>
-        <div id="gameOverOverlay" class="game-over-overlay">
-            <div id="gameOverMessage" class="game-over-message">Game Over</div>
-            <button id="restartButton" class="restart-button">Restart</button>
+        
+        <div id="startOverlay" class="game-overlay visible">
+            <div class="game-message">Press to Play!</div>
+            <button id="startGameButton" class="action-button">Start Game</button>
+        </div>
+
+        <div id="gameOverOverlay" class="game-overlay">
+            <div id="gameOverMessage" class="game-message">Game Over</div>
+            <div class="button-group">
+                <button id="restartLevelButton" class="action-button restart-level">Reset Level</button>
+                <button id="restartGameButton" class="action-button">Restart Game</button>
+            </div>
         </div>
         <div class="controls">
             Use arrow keys to move.
         </div>
     </div>
     
+    <div class="options-container">
+        <div>
+            <label for="greenEnemyPassCheckbox">Activate Green Enemy Free Pass</label>
+            <input type="checkbox" id="greenEnemyPassCheckbox" disabled>
+        </div>
+        <div>
+            <label for="musicToggle">Music On/Off</label>
+            <input type="checkbox" id="musicToggle">
+        </div>
+    </div>
+
+    
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/tone/14.8.49/Tone.js"></script>
     <script>
         const canvas = document.getElementById('gameCanvas');
         const ctx = canvas.getContext('2d');
+        const startOverlay = document.getElementById('startOverlay');
+        const startGameButton = document.getElementById('startGameButton');
         const gameOverOverlay = document.getElementById('gameOverOverlay');
         const gameOverMessage = document.getElementById('gameOverMessage');
-        const restartButton = document.getElementById('restartButton');
+        const restartGameButton = document.getElementById('restartGameButton');
+        const restartLevelButton = document.getElementById('restartLevelButton');
         const gameStatus = document.getElementById('gameStatus');
+        const greenEnemyPassCheckbox = document.getElementById('greenEnemyPassCheckbox');
+        const musicToggle = document.getElementById('musicToggle');
 
         let tileWidth, tileHeight;
         let gameRunning = false;
         let lastPlayerMoveTime = 0;
         let playerMoveInterval = 150;
+        let isMusicPlaying = false;
+        let greenEnemyFreePass = false;
 
         // Game state
         let player = {};
@@ -187,89 +232,197 @@
         let visitedCount = 0;
         let totalPaths = 0;
         
-        // Maze configuration
-        const MAZE_SIZES = [
-            { rows: 15, cols: 20 }, // Level 1
-            { rows: 17, cols: 22 }, // Level 2
-            { rows: 19, cols: 25 }, // Level 3
-            { rows: 21, cols: 28 }, // Level 4
-            { rows: 25, cols: 35 }, // Level 5
-            { rows: 27, cols: 37 }, // Level 6
-            { rows: 29, cols: 39 }, // Level 7
-            { rows: 31, cols: 41 }, // Level 8
-            { rows: 33, cols: 43 }, // Level 9
-            { rows: 35, cols: 45 }  // Level 10
+        // --- Static Maze Data ---
+        // 0 = wall, 1 = unvisited path, 2 = visited path
+        const EASY_MAZE = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,0],
+            [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,1,0],
+            [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,0,1,0],
+            [0,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,1,0,1,0],
+            [0,0,0,1,0,1,0,0,0,0,0,1,0,0,0,0,1,0,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,1,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
         ];
+
+        const MEDIUM_MAZE = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,1,1,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,1,1,1,1,0],
+            [0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0,1,0],
+            [0,1,0,1,1,1,0,1,1,1,0,1,1,1,0,1,0,1,0,1,0,1,0,1,0],
+            [0,1,0,0,0,1,0,0,0,1,0,0,0,1,0,1,1,1,0,1,1,1,0,1,0],
+            [0,1,1,1,0,1,1,1,0,1,1,1,0,1,0,0,0,1,0,0,0,1,0,1,0],
+            [0,0,0,1,0,0,0,1,0,0,0,1,0,1,0,1,1,1,1,1,0,1,0,1,0],
+            [0,1,1,1,1,1,1,1,1,1,0,1,0,1,1,1,0,0,0,0,0,1,0,1,0],
+            [0,1,0,0,0,0,0,0,0,1,0,1,0,0,0,1,0,1,1,1,1,1,1,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,0,1,0,0,0,1,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        ];
+        
+        const HARD_MAZE = [
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+            [0,1,1,1,0,1,0,1,0,1,1,1,1,1,1,1,0,1,1,1,1,1,0,1,0],
+            [0,0,1,0,0,1,0,1,0,1,0,0,0,1,0,1,0,1,0,0,0,1,0,1,0],
+            [0,1,1,1,1,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,0],
+            [0,1,0,0,0,0,0,1,0,0,0,0,0,1,0,0,0,0,0,0,0,1,0,1,0],
+            [0,1,0,1,1,1,1,1,1,1,1,1,0,1,1,1,1,1,1,1,0,1,1,1,0],
+            [0,1,0,1,0,0,0,0,0,0,0,1,0,1,0,0,0,0,0,1,0,1,0,0,0],
+            [0,1,1,1,0,1,1,1,1,1,0,1,0,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,0,1,0,1,0,0,0,1,0,1,0,0,0,0,0,0,0,0,0,0,0,1,0],
+            [0,1,1,1,1,1,0,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,1,0],
+            [0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0],
+        ];
+
+        const MAZE_MAPS = [
+            EASY_MAZE, EASY_MAZE, EASY_MAZE, EASY_MAZE, EASY_MAZE,
+            MEDIUM_MAZE, MEDIUM_MAZE, MEDIUM_MAZE, MEDIUM_MAZE, MEDIUM_MAZE,
+            // HARD_MAZE, ... (will add more hard mazes here once you select them)
+        ];
+
+        // Maze configuration
+        const MAZE_SIZES = MAZE_MAPS.map(m => ({ rows: m.length, cols: m[0].length }));
         const NUM_LEVELS = 10;
-        const ENEMY_SPEED_BASE = 150;
-        const ENEMY_SPEED_DECREASE_FACTOR = 10;
+        const ENEMY_SPEED_BASE = 275; 
+        const ENEMY_SPEED_DECREASE_FACTOR = 3; 
+        const ENEMY_SPAWN_MIN_DISTANCE = 8;
+        const RANDOM_MOVE_DURATION = 1000;
 
         let currentLevel = 0;
 
-        function generateMaze() {
-            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
-            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
-            let grid = Array.from({ length: MAZE_ROWS }, () => Array(MAZE_COLS).fill(0));
-            let stack = [];
-
-            // Start at a random odd-numbered cell
-            const startX = 1 + 2 * Math.floor(Math.random() * ((MAZE_COLS - 1) / 2));
-            const startY = 1 + 2 * Math.floor(Math.random() * ((MAZE_ROWS - 1) / 2));
-            grid[startY][startX] = 1; // Mark as unvisited path
-            stack.push({ x: startX, y: startY });
-
-            const directions = [{ dx: 0, dy: -2 }, { dx: 0, dy: 2 }, { dx: -2, dy: 0 }, { dx: 2, dy: 0 }];
-
-            while (stack.length > 0) {
-                let current = stack[stack.length - 1];
-                let neighbors = [];
-
-                // Find unvisited neighbors (2 cells away)
-                for (const { dx, dy } of directions) {
-                    const nextX = current.x + dx;
-                    const nextY = current.y + dy;
-
-                    if (nextX > 0 && nextX < MAZE_COLS - 1 && nextY > 0 && nextY < MAZE_ROWS - 1 && grid[nextY][nextX] === 0) {
-                        neighbors.push({ x: nextX, y: nextY, dx: dx, dy: dy });
-                    }
-                }
-
-                if (neighbors.length > 0) {
-                    // Pick a random unvisited neighbor
-                    const next = neighbors[Math.floor(Math.random() * neighbors.length)];
-                    
-                    // Carve a path to it (mark the wall between as a path)
-                    grid[current.y + next.dy / 2][current.x + next.dx / 2] = 1;
-                    grid[next.y][next.x] = 1;
-                    stack.push(next);
-                } else {
-                    stack.pop(); // Backtrack
-                }
-            }
-            return grid;
+        // Music setup
+        let ambientSynth;
+        let ambientSequence;
+        function setupMusic() {
+            if (ambientSynth) return;
+            ambientSynth = new Tone.PolySynth(Tone.MonoSynth, {
+                oscillator: { type: 'square' },
+                envelope: {
+                    attack: 0.01,
+                    decay: 0.2,
+                    sustain: 0.1,
+                    release: 0.5
+                },
+                volume: -10
+            }).toDestination();
         }
 
-        function getRandomValidPosition(grid) {
+        function startMusic() {
+            if (isMusicPlaying) return;
+            Tone.start();
+            setupMusic();
+            const notes = ["C3", "E3", "G3", "C4", "G3", "E3"];
+            ambientSequence = new Tone.Sequence((time, note) => {
+                ambientSynth.triggerAttackRelease(note, "8n", time);
+            }, notes, "4n").start(0);
+            
+            Tone.Transport.start();
+            isMusicPlaying = true;
+        }
+        
+        function stopMusic() {
+            if (isMusicPlaying) {
+                Tone.Transport.stop();
+                ambientSequence.stop();
+                isMusicPlaying = false;
+            }
+        }
+
+        // A-star pathfinding algorithm for enemies, with maze wrapping
+        function findPath(start, end, mazeGrid) {
+            const MAZE_ROWS = mazeGrid.length;
+            const MAZE_COLS = mazeGrid[0].length;
+            const openList = [{ ...start, f: 0, g: 0, h: 0, parent: null }];
+            const closedList = [];
+
+            while (openList.length > 0) {
+                let lowestIndex = 0;
+                for (let i = 0; i < openList.length; i++) {
+                    if (openList[i].f < openList[lowestIndex].f) {
+                        lowestIndex = i;
+                    }
+                }
+                const current = openList.splice(lowestIndex, 1)[0];
+                closedList.push(current);
+
+                if (current.x === end.x && current.y === end.y) {
+                    let path = [];
+                    let temp = current;
+                    while (temp.parent) {
+                        path.push({ x: temp.x, y: temp.y });
+                        temp = temp.parent;
+                    }
+                    return path.reverse();
+                }
+
+                const directions = [{ dx: 0, dy: -1 }, { dx: 0, dy: 1 }, { dx: -1, dy: 0 }, { dx: 1, dy: 0 }];
+                for (const { dx, dy } of directions) {
+                    let neighborX = current.x + dx;
+                    let neighborY = current.y + dy;
+
+                    // Apply maze wrapping
+                    if (neighborX < 0) neighborX = MAZE_COLS - 1;
+                    else if (neighborX >= MAZE_COLS) neighborX = 0;
+                    if (neighborY < 0) neighborY = MAZE_ROWS - 1;
+                    else if (neighborY >= MAZE_ROWS) neighborY = 0;
+
+                    if (mazeGrid[neighborY][neighborX] === 0) {
+                        continue;
+                    }
+
+                    if (closedList.some(node => node.x === neighborX && node.y === neighborY)) {
+                        continue;
+                    }
+
+                    const g = current.g + 1;
+                    const h = Math.abs(neighborX - end.x) + Math.abs(neighborY - end.y);
+                    const f = g + h;
+                    const neighbor = { x: neighborX, y: neighborY, f, g, h, parent: current };
+
+                    if (!openList.some(node => node.x === neighbor.x && node.y === neighbor.y)) {
+                        openList.push(neighbor);
+                    }
+                }
+            }
+            return [];
+        }
+        
+        function loadMaze() {
+            // Load the maze from the predefined array
+            maze = JSON.parse(JSON.stringify(MAZE_MAPS[currentLevel]));
+        }
+
+        function getRandomValidPosition(grid, playerPos = null, minDistance = 0) {
             const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
             const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             let x, y;
             do {
                 x = Math.floor(Math.random() * MAZE_COLS);
                 y = Math.floor(Math.random() * MAZE_ROWS);
+                if (playerPos) {
+                    const distance = Math.abs(x - playerPos.x) + Math.abs(y - playerPos.y);
+                    if (distance < minDistance) {
+                        continue;
+                    }
+                }
             } while (grid[y][x] !== 1);
             return { x, y };
         }
-
-        function resetGame() {
-            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
-            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
-
+        
+        function resetGame(startingLevel = 0) {
             gameRunning = true;
+            greenEnemyFreePass = false;
+            greenEnemyPassCheckbox.checked = false; // Reset checkbox state on reset
+            currentLevel = startingLevel;
             visitedCount = 0;
             totalPaths = 0;
             
-            maze = generateMaze();
+            loadMaze();
 
+            const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
+            const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             for (let r = 0; r < MAZE_ROWS; r++) {
                 for (let c = 0; c < MAZE_COLS; c++) {
                     if (maze[r][c] === 1) {
@@ -279,7 +432,7 @@
             }
 
             const playerColor = getComputedStyle(document.documentElement).getPropertyValue('--player-color').trim();
-            player = { ...getRandomValidPosition(maze), size: 0.7, dx: 0, dy: 0, color: playerColor};
+            player = { ...getRandomValidPosition(maze), size: 0.7, dx: 0, dy: 0, color: playerColor, path: [] };
 
             enemies = [];
             const enemyColors = [
@@ -289,9 +442,21 @@
             ];
             let numEnemies = currentLevel < 5 ? 2 : 3;
             for (let i = 0; i < numEnemies; i++) {
-                enemies.push({ ...getRandomValidPosition(maze), size: 0.7, dx: 0, dy: 0, color: enemyColors[i], lastMoveTime: 0 });
+                enemies.push({ 
+                    ...getRandomValidPosition(maze, player, ENEMY_SPAWN_MIN_DISTANCE), 
+                    size: 0.7, 
+                    dx: 0, 
+                    dy: 0, 
+                    color: enemyColors[i], 
+                    lastMoveTime: 0, 
+                    path: [],
+                    isWandering: true,
+                    wanderEndTime: 0,
+                    target: null
+                });
             }
-
+            
+            startOverlay.classList.remove('visible');
             gameOverOverlay.classList.remove('visible');
             gameStatus.textContent = `Level ${currentLevel + 1}`;
             
@@ -299,7 +464,11 @@
                 maze[player.y][player.x] = 2;
                 visitedCount++;
             }
+
+            // Enable/disable checkbox based on level
+            greenEnemyPassCheckbox.disabled = (currentLevel === 0);
             
+            saveGameProgress();
             resizeCanvas();
             requestAnimationFrame(gameLoop);
         }
@@ -309,7 +478,7 @@
             const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             const container = document.querySelector('.game-container');
             const containerWidth = container.offsetWidth - 40;
-            const containerHeight = window.innerHeight * 0.6;
+            const containerHeight = window.innerHeight * 0.8;
 
             const cellWidth = Math.min(containerWidth / MAZE_COLS, containerHeight / MAZE_ROWS);
             
@@ -347,7 +516,7 @@
                     ctx.closePath();
                 }
             }
-
+            
             drawCharacter(player, player.color);
             enemies.forEach(enemy => drawCharacter(enemy, enemy.color));
         }
@@ -372,10 +541,16 @@
             }
             lastPlayerMoveTime = now;
             
-            const newX = player.x + player.dx;
-            const newY = player.y + player.dy;
+            let newX = player.x + player.dx;
+            let newY = player.y + player.dy;
 
-            if (newX >= 0 && newX < MAZE_COLS && newY >= 0 && newY < MAZE_ROWS && maze[newY][newX] !== 0) {
+            // Apply maze wrapping
+            if (newX < 0) newX = MAZE_COLS - 1;
+            else if (newX >= MAZE_COLS) newX = 0;
+            if (newY < 0) newY = MAZE_ROWS - 1;
+            else if (newY >= MAZE_ROWS) newY = 0;
+
+            if (maze[newY][newX] !== 0) {
                 player.x = newX;
                 player.y = newY;
                 
@@ -383,6 +558,7 @@
                     maze[player.y][player.x] = 2;
                     visitedCount++;
                     checkWinCondition();
+                    saveGameProgress();
                 }
             } else {
                 player.dx = 0;
@@ -394,35 +570,53 @@
             const MAZE_ROWS = MAZE_SIZES[currentLevel].rows;
             const MAZE_COLS = MAZE_SIZES[currentLevel].cols;
             const now = Date.now();
-            const speedFactor = currentLevel < 5 ? currentLevel : (currentLevel - 5);
+            const speedFactor = currentLevel;
             const enemyMoveDelay = ENEMY_SPEED_BASE - (speedFactor * ENEMY_SPEED_DECREASE_FACTOR);
             
-            enemies.forEach(enemy => {
+            enemies.forEach((enemy, index) => {
                 if (now - enemy.lastMoveTime < enemyMoveDelay) {
                     return;
                 }
                 enemy.lastMoveTime = now;
-
-                const directions = [];
-                if (enemy.y > 0 && maze[enemy.y - 1][enemy.x] !== 0) directions.push({ dx: 0, dy: -1 });
-                if (enemy.y < MAZE_ROWS - 1 && maze[enemy.y + 1][enemy.x] !== 0) directions.push({ dx: 0, dy: 1 });
-                if (enemy.x > 0 && maze[enemy.y][enemy.x - 1] !== 0) directions.push({ dx: -1, dy: 0 });
-                if (enemy.x < MAZE_COLS - 1 && maze[enemy.y][enemy.x + 1] !== 0) directions.push({ dx: 1, dy: 0 });
                 
-                if (directions.length > 2 || (enemy.dx === 0 && enemy.dy === 0)) {
-                    const newDirection = directions[Math.floor(Math.random() * directions.length)];
-                    enemy.dx = newDirection.dx;
-                    enemy.dy = newDirection.dy;
-                }
+                // Behavior for the first enemy (chaser)
+                if (index === 0) {
+                    if (enemy.path.length === 0 || Math.random() < 0.1) { // Recalculate path occasionally to make it losable
+                        enemy.path = findPath({x: enemy.x, y: enemy.y}, player, maze);
+                    }
+                    if (enemy.path.length > 0) {
+                        const nextStep = enemy.path.shift();
+                        enemy.x = nextStep.x;
+                        enemy.y = nextStep.y;
+                    } else {
+                        // Wander for a bit if a path can't be found
+                        const directions = [];
+                        if (maze[enemy.y][(enemy.x - 1 + MAZE_COLS) % MAZE_COLS] !== 0) directions.push({dx: -1, dy: 0});
+                        if (maze[enemy.y][(enemy.x + 1) % MAZE_COLS] !== 0) directions.push({dx: 1, dy: 0});
+                        if (maze[(enemy.y - 1 + MAZE_ROWS) % MAZE_ROWS][enemy.x] !== 0) directions.push({dx: 0, dy: -1});
+                        if (maze[(enemy.y + 1) % MAZE_ROWS][enemy.x] !== 0) directions.push({dx: 0, dy: 1});
+                        
+                        if (directions.length > 0) {
+                            const newDirection = directions[Math.floor(Math.random() * directions.length)];
+                            let newX = enemy.x + newDirection.dx;
+                            let newY = enemy.y + newDirection.dy;
+                            newX = (newX + MAZE_COLS) % MAZE_COLS;
+                            newY = (newY + MAZE_ROWS) % MAZE_ROWS;
+                            enemy.x = newX;
+                            enemy.y = newY;
+                        }
+                    }
+                } else { // Behavior for other enemies (patrol)
+                    if (enemy.path.length === 0) {
+                        enemy.target = getRandomValidPosition(maze);
+                        enemy.path = findPath({x: enemy.x, y: enemy.y}, enemy.target, maze);
+                    }
 
-                const newX = enemy.x + enemy.dx;
-                const newY = enemy.y + enemy.dy;
-                if (newX >= 0 && newX < MAZE_COLS && newY >= 0 && newY < MAZE_ROWS && maze[newY][newX] !== 0) {
-                    enemy.x = newX;
-                    enemy.y = newY;
-                } else {
-                    enemy.dx = 0;
-                    enemy.dy = 0;
+                    if (enemy.path.length > 0) {
+                        const nextStep = enemy.path.shift();
+                        enemy.x = nextStep.x;
+                        enemy.y = nextStep.y;
+                    }
                 }
             });
         }
@@ -430,14 +624,24 @@
         function checkCollision() {
             enemies.forEach(enemy => {
                 if (player.x === enemy.x && player.y === enemy.y) {
-                    gameRunning = false;
-                    gameOverMessage.textContent = "Game Over!";
-                    gameOverOverlay.classList.add('visible');
-                    gameStatus.textContent = "Game Over!";
+                    const greenEnemyColor = getComputedStyle(document.documentElement).getPropertyValue('--enemy-color-2').trim();
+
+                    if (enemy.color === greenEnemyColor && greenEnemyFreePass) {
+                        greenEnemyFreePass = false;
+                        greenEnemyPassCheckbox.checked = false;
+                        Object.assign(enemy, getRandomValidPosition(maze, player, ENEMY_SPAWN_MIN_DISTANCE));
+                        enemy.path = [];
+                    } else {
+                        gameRunning = false;
+                        stopMusic();
+                        gameOverMessage.textContent = "Game Over!";
+                        gameOverOverlay.classList.add('visible');
+                        gameStatus.textContent = `Level ${currentLevel + 1} - Game Over!`;
+                    }
                 }
             });
         }
-
+        
         function checkWinCondition() {
             if (visitedCount === totalPaths) {
                 gameRunning = false;
@@ -447,9 +651,10 @@
                     gameStatus.textContent = `Level ${currentLevel + 1} Complete!`;
                     setTimeout(() => {
                         currentLevel++;
-                        resetGame();
+                        resetGame(currentLevel);
                     }, 2000);
                 } else {
+                    stopMusic();
                     gameOverMessage.textContent = "You Win!";
                     gameOverOverlay.classList.add('visible');
                     gameStatus.textContent = "You Win!";
@@ -474,7 +679,6 @@
 
         function handleKeyDown(event) {
             if (!gameRunning) {
-                resetGame();
                 return;
             }
 
@@ -497,18 +701,67 @@
                     break;
             }
         }
+        
+        function saveGameProgress() {
+            const progress = {
+                currentLevel: currentLevel
+            };
+            localStorage.setItem('chazeAmazeProgress', JSON.stringify(progress));
+        }
+
+        function loadGameProgress() {
+            const progress = localStorage.getItem('chazeAmazeProgress');
+            if (progress) {
+                const parsedProgress = JSON.parse(progress);
+                currentLevel = parsedProgress.currentLevel;
+            }
+        }
 
         window.onload = function() {
-            resetGame();
+            loadGameProgress();
             resizeCanvas();
             window.addEventListener('resize', resizeCanvas);
             document.addEventListener('keydown', handleKeyDown);
-            restartButton.addEventListener('click', () => {
+
+            // Hide the game over overlay and show the start overlay on load
+            gameOverOverlay.classList.remove('visible');
+            startOverlay.classList.add('visible');
+            
+            startGameButton.addEventListener('click', () => {
+                if (musicToggle.checked) {
+                    startMusic();
+                }
+                resetGame(currentLevel);
+            });
+
+            restartGameButton.addEventListener('click', () => {
+                localStorage.removeItem('chazeAmazeProgress');
                 currentLevel = 0;
-                resetGame();
+                if (musicToggle.checked) {
+                    startMusic();
+                }
+                resetGame(currentLevel);
+            });
+            
+            restartLevelButton.addEventListener('click', () => {
+                if (musicToggle.checked) {
+                    startMusic();
+                }
+                resetGame(currentLevel);
+            });
+            
+            greenEnemyPassCheckbox.addEventListener('change', () => {
+                greenEnemyFreePass = greenEnemyPassCheckbox.checked;
+            });
+
+            musicToggle.addEventListener('change', () => {
+                if (musicToggle.checked) {
+                    startMusic();
+                } else {
+                    stopMusic();
+                }
             });
         };
-
     </script>
 </body>
 </html>
